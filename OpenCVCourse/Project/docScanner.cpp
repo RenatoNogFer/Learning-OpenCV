@@ -27,8 +27,7 @@ std::vector<cv::Point> getContours(cv::Mat img){
     int area, maxArea = 0;
 
     for(int i = 0; i < contours.size(); i++){
-        area = cv::contourArea(contours[i]);
-        std::cout << area << std::endl;
+        area = cv::contourArea(contours[i]); 
 
         std::string objectType;
 
@@ -46,29 +45,63 @@ std::vector<cv::Point> getContours(cv::Mat img){
     return biggest;
 }
 
+std::vector<cv::Point> reorder(std::vector<cv::Point> points){
+    std::vector<cv::Point> newPoints;
+    std::vector<int> sumPoints, subPoints;
+
+    for(int i = 0; i < points.size(); i++){
+        sumPoints.push_back(points[i].x + points[i].y);
+        subPoints.push_back(points[i].x - points[i].y);
+    }
+
+    newPoints.push_back(points[std::min_element(sumPoints.begin(), sumPoints.end()) - sumPoints.begin()]); // 0
+    newPoints.push_back(points[std::max_element(subPoints.begin(), subPoints.end()) - subPoints.begin()]);
+    newPoints.push_back(points[std::min_element(subPoints.begin(), subPoints.end()) - subPoints.begin()]);  
+    newPoints.push_back(points[std::max_element(sumPoints.begin(), sumPoints.end()) - sumPoints.begin()]); // 3
+
+    return newPoints;
+}
+
 cv::Mat drawPoints(std::vector<cv::Point> points, cv::Mat img){
     for(int i = 0; i < points.size(); i++){
-        cv::circle(img, points[i], 30, cv::Scalar (0, 0, 255), cv::FILLED);
-        cv::putText(img, std::to_string(i), points[i], cv::FONT_HERSHEY_PLAIN, 10, cv::Scalar (0, 0, 255), 5);
+        cv::circle(img, points[i], 5, cv::Scalar (0, 0, 255), cv::FILLED);
+        cv::putText(img, std::to_string(i), points[i], cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar (0, 0, 255), 2);
     }
     return img;
+}
+
+cv::Mat getWarp(cv::Mat img, std::vector<cv::Point> points, float width, float height){
+    cv::Mat imgWarp;
+
+    cv::Point2f oCoords[4] = {points[0], points[1], points[2], points[3]};
+    cv::Point2f fCoords[4] = { {0.0f, 0.0f}, {width, 0.0f}, {0.0f, height}, {width, height}};
+
+    cv::Mat matrix = cv::getPerspectiveTransform(oCoords, fCoords);
+    cv::warpPerspective(img, imgWarp, matrix, cv::Point(width, height));
+
+    return imgWarp;
 }
 
 
 int main(){
     std::string imgPath = "../resources/paper.jpg";
     cv::Mat imgOriginal = cv::imread(imgPath);
-    std::vector<cv::Point> initialPoints;
+    std::vector<cv::Point> initialPoints, docPoints;
+    float width = 420, height = 596;
 
     // Temporary scaling for easier image visualization
     cv::resize(imgOriginal, imgOriginal, cv::Size(), 0.5, 0.5);
 
     cv::Mat imgDil = preprocessing(imgOriginal);
     initialPoints = getContours(imgDil);
-    cv::Mat imgPoints = drawPoints(initialPoints, imgOriginal);
+    docPoints = reorder(initialPoints);
+    cv::Mat imgWarp = getWarp(imgOriginal, docPoints, width, height);
+
+    // Crop to beautify result
+    cv::Rect roi(5, 5, width - (2*5), height - (2*5));
+    cv::Mat document = imgWarp(roi);
 
     cv::imshow("Image", imgOriginal);
-    cv::imshow("Image preprocessed", imgDil);
-    cv::imshow("Image w/ points", imgPoints);
+    cv::imshow("Document", document);
     cv::waitKey(0);
 }
